@@ -74,8 +74,8 @@ const currentStockData = computed(() => selectedTicker.value ? stocks.value[sele
 const selectStock = async (ticker) => {
     selectedTicker.value = ticker;
     try { const res = await fetch(`${API_URL}/api/stocks/${ticker}`); if(res.ok) chartHistory.value = await res.json(); 
-    } catch(e){
-      console.error(e);
+    } catch(e) {
+        console.error("Failed to fetch stock history:", e);
     }
 };
 

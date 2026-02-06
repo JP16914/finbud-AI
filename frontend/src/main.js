@@ -1,5 +1,12 @@
-import './assets/main.css'
 import { createApp } from 'vue'
 import App from './App.vue'
+import './assets/main.css'
+import vue3GoogleLogin from 'vue3-google-login'
 
-createApp(App).mount('#app')
+const app = createApp(App)
+
+app.use(vue3GoogleLogin, {
+  clientId: process.env.VUE_APP_GOOGLE_CLIENT_ID
+})
+
+app.mount('#app')
