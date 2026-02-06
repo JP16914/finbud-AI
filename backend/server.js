@@ -1,21 +1,55 @@
+require('dotenv').config();
 const express = require('express');
-const fs = require('fs');
 const cors = require('cors');
+const mongoose = require('mongoose');
+const helmet = require('helmet');
+const { createClient } = require('redis');
+
+// Import Routes
+const authRoute = require('./routes/auth');
+const stocksRoute = require('./routes/stocks');
+const walletRoute = require('./routes/wallet');
+const tradeRoute = require('./routes/trade');
+
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
-app.use(cors()); // Allows Frontend to talk to Backend
+app.use(helmet());
+app.use(express.json());
 
-// Core Route: Get cleaned stock data
-app.get('/api/stocks', (req, res) => {
-    fs.readFile('./cleaned_data.json', 'utf8', (err, data) => {
-        if (err) {
-            return res.status(500).json({ error: "Data file not found." });
-        }
-        res.json(JSON.parse(data));
-    });
+// CORS Động
+const allowedOrigins = ['http://localhost:8080', 'http://localhost:5173', process.env.FRONTEND_URL];
+app.use(cors({
+    origin: (origin, cb) => {
+        if (!origin || allowedOrigins.includes(origin)) cb(null, true);
+        else cb(new Error('Not allowed by CORS'));
+    },
+    credentials: true
+}));
+
+// Redis
+const redisClient = createClient({ 
+    url: process.env.REDIS_URL,
+    socket: { reconnectStrategy: (retries) => Math.min(retries * 50, 2000) }
 });
+redisClient.on('error', (err) => console.log('❌ Redis Error:', err));
+(async () => {
+    await redisClient.connect();
+    console.log('✅ Redis Connected');
+    app.set('redisClient', redisClient);
+})();
+
+// MongoDB
+mongoose.connect(process.env.MONGO_URI)
+    .then(() => console.log('✅ MongoDB Connected'))
+    .catch(err => console.error('❌ MongoDB Error:', err));
+
+// Routes
+app.use('/api/auth', authRoute);
+app.use('/api/stocks', stocksRoute);
+app.use('/api/wallet', walletRoute);
+app.use('/api/trade', tradeRoute);
 
 app.listen(PORT, () => {
-    console.log(`FinBud AI Server running at http://localhost:${PORT}`);
+    console.log(`🚀 Server running on port ${PORT}`);
 });
