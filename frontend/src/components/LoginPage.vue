@@ -28,7 +28,7 @@
           <div v-if="error" class="text-red-500 text-sm text-center font-bold">{{ error }}</div>
 
           <button type="submit" :disabled="loading" class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition shadow-lg">
-             {{ loading ? 'Processing...' : 'Continue' }}
+              {{ loading ? 'Processing...' : 'Continue' }}
           </button>
         </form>
       </div>
@@ -47,7 +47,7 @@
           <div v-if="error" class="text-red-500 text-sm text-center font-bold">{{ error }}</div>
 
           <button type="submit" :disabled="loading" class="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl transition shadow-lg">
-             {{ loading ? 'Verifying...' : 'Verify & Login' }}
+              {{ loading ? 'Verifying...' : 'Verify & Login' }}
           </button>
           
           <button type="button" @click="showOtpForm=false" class="w-full text-slate-400 hover:text-slate-600 text-sm">Back to Login</button>
@@ -67,6 +67,8 @@
 <script setup>
 /* eslint-disable no-undef */
 import { ref } from 'vue';
+import { decodeCredential } from 'vue3-google-login'; // <--- 1. IMPORT CẦN THIẾT
+
 const emit = defineEmits(['login-success', 'switch-to-signup']);
 
 const email = ref('');
@@ -80,19 +82,40 @@ const API_URL = process.env.VUE_APP_API_URL || 'http://localhost:3000';
 // Xử lý Google Login
 const handleGoogleLogin = async (response) => {
     try {
+        // --- 2. GIẢI MÃ TOKEN GOOGLE ---
+        // Lấy thông tin user (Tên, Ảnh, Email) trực tiếp từ Google Token
+        const userData = decodeCredential(response.credential);
+        
+        // Gửi token về backend để xác thực và lấy JWT
         const res = await fetch(`${API_URL}/api/auth/google`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ credential: response.credential })
+            body: JSON.stringify({ token: response.credential })
         });
+        
         const data = await res.json();
+        
         if (res.ok) {
+            // Lưu JWT Token để gọi API sau này
             localStorage.setItem('token', data.token);
+
+            // --- 3. LƯU THÔNG TIN USER VÀO LOCALSTORAGE ---
+            // Header sẽ đọc 'user_info' này để hiển thị Avatar và Tên
+            const infoToSave = {
+                name: userData.name,       // Tên thật trên Google
+                email: userData.email,
+                picture: userData.picture  // Link ảnh Avatar Google
+            };
+            localStorage.setItem('user_info', JSON.stringify(infoToSave));
+
             emit('login-success');
         } else {
             error.value = data.error;
         }
-    } catch (e) { error.value = "Connection Failed"; }
+    } catch (e) { 
+        console.error(e);
+        error.value = "Connection Failed"; 
+    }
 };
 
 // Xử lý Login thường Step 1

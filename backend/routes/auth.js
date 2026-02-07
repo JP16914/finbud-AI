@@ -66,18 +66,32 @@ router.post('/verify-otp', async (req, res) => {
 
 router.post('/google', async (req, res) => {
     try {
-        const { credential } = req.body;
-        const ticket = await googleClient.verifyIdToken({ idToken: credential, audience: process.env.GOOGLE_CLIENT_ID });
-        const { email, name, picture } = ticket.getPayload();
+        const token = req.body.token || req.body.credential;
+        if (!token) {
+            return res.status(400).json({ error: "Missing Google Token" });
+        }
+        const ticket = await googleClient.verifyIdToken({ 
+            idToken: token, 
+            audience: process.env.GOOGLE_CLIENT_ID 
+        });
+
+        const payload = ticket.getPayload();
+        const { email, name, picture, sub } = payload;
         
         let user = await User.findOne({ email });
         if (!user) {
-            user = new User({ username: name, email, password: null, authType: 'google', avatar: picture });
+            user = new User({ username: name, email, password: sub, authType: 'google', avatar: picture, isVerified: true });
             await user.save();
         }
-        const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '7d' });
-        res.json({ message: "Success", token, user });
-    } catch (e) { res.status(400).json({ error: "Google Failed" }); }
+        const jwtToken = jwt.sign({ _id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '7d' });
+        res.json({ 
+            token: jwtToken, 
+            user: { name: user.name, email: user.email, picture: user.avatar } 
+        });
+    } catch (e) { 
+        console.error("❌ Google Auth Error:", e.message);
+        res.status(400).json({ error: "Google Login Failed", details: e.message }); 
+    }
 });
 
 module.exports = router;

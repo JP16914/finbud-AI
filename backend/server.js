@@ -18,12 +18,8 @@ app.use(helmet());
 app.use(express.json());
 
 // CORS Động
-const allowedOrigins = ['http://localhost:8080', 'http://localhost:5173', process.env.FRONTEND_URL];
 app.use(cors({
-    origin: (origin, cb) => {
-        if (!origin || allowedOrigins.includes(origin)) cb(null, true);
-        else cb(new Error('Not allowed by CORS'));
-    },
+    origin: true, 
     credentials: true
 }));
 

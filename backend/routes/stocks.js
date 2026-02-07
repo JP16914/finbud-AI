@@ -1,55 +1,95 @@
 const router = require('express').Router();
 const Stock = require('../models/Stock');
 
-// --- 1. GET MARKET SUMMARY (Cho Dashboard & Market Table) ---
-// API: GET /api/stocks
-// Chức năng: Lấy danh sách tất cả các mã cổ phiếu và giá mới nhất của chúng.
-router.get('/', async (req, res) => {
-    try {
-        // Lấy danh sách các mã Ticker duy nhất (vd: ['AAPL', 'GOOGL', 'TSLA'])
-        const tickers = await Stock.distinct('Ticker');
-        const summary = {};
+// --- HÀM HELPER: Gom nhóm dữ liệu theo tháng (Dùng cho nút ALL) ---
+// Giải thích: Hàm này giúp giảm tải cho Frontend. Thay vì gửi 2500 điểm, 
+// ta tính trung bình mỗi tháng 1 điểm -> Chỉ còn khoảng 120 điểm.
+const processGroupedData = (data) => {
+    if (!data || data.length === 0) return [];
 
-        // Lặp qua từng mã để tìm bản ghi mới nhất (theo ngày)
-        for (const ticker of tickers) {
-            // sort({ Date: -1 }) nghĩa là lấy ngày mới nhất
-            const latestData = await Stock.findOne({ Ticker: ticker }).sort({ Date: -1 });
-            
-            if (latestData) {
-                summary[ticker] = latestData;
-            }
-        }
+    const grouped = {};
+    
+    data.forEach(item => {
+        // Cắt chuỗi ngày để lấy Tháng (YYYY-MM) làm key
+        // Ví dụ: "2016-02-23" -> "2016-02"
+        const monthKey = item.Date.substring(0, 7);
         
-        // Trả về object dạng: { "AAPL": { ...data }, "GOOGL": { ...data } }
-        res.json(summary);
+        if (!grouped[monthKey]) grouped[monthKey] = [];
+        grouped[monthKey].push(item.Close);
+    });
+
+    // Tính trung bình cộng
+    return Object.keys(grouped).sort().map(key => {
+        const prices = grouped[key];
+        const avg = prices.reduce((sum, val) => sum + val, 0) / prices.length;
+        return { Date: key, Close: parseFloat(avg.toFixed(2)) };
+    });
+};
+
+// --- API LẤY DỮ LIỆU ---
+router.get('/:ticker', async (req, res) => {
+    try {
+        const ticker = req.params.ticker.toUpperCase();
+        // Mặc định là '1Y' nếu không gửi gì lên
+        const period = req.query.period || '1Y'; 
+
+        console.log(`📡 API Called: ${ticker} | Period: ${period}`);
+
+        // 1. Xây dựng bộ lọc ngày
+        let dateQuery = {};
+        
+        if (period !== 'ALL') {
+            const startDate = new Date();
+            if (period === '1W') startDate.setDate(startDate.getDate() - 7);
+            if (period === '1M') startDate.setMonth(startDate.getMonth() - 1);
+            // Quan trọng: Nếu là 1Y, lấy từ 1 năm trước đến nay
+            if (period === '1Y') startDate.setFullYear(startDate.getFullYear() - 1);
+            
+            // Query lấy những ngày LỚN HƠN ngày bắt đầu
+            dateQuery = { 
+                Date: { $gte: startDate.toISOString().split('T')[0] } 
+            };
+        }
+
+        // 2. Truy vấn Database (CORE CODE)
+        // - find({ Ticker, ...dateQuery }): Tìm đúng mã và đúng khoảng ngày
+        // - sort({ Date: 1 }): Sắp xếp Cũ trước -> Mới sau (để vẽ biểu đồ từ trái qua phải)
+        // - lean(): Giúp query nhanh hơn, trả về object thuần JSON
+        const stocks = await Stock.find({ Ticker: ticker, ...dateQuery })
+                                  .sort({ Date: 1 }) 
+                                  .lean();
+
+        console.log(`✅ Found: ${stocks.length} rows`);
+
+        if (stocks.length === 0) return res.json([]);
+
+        // 3. Xử lý dữ liệu trả về
+        if (period === 'ALL') {
+            // Nếu chọn ALL -> Gom nhóm theo tháng cho nhẹ
+            const groupedData = processGroupedData(stocks);
+            return res.json(groupedData);
+        }
+
+        // Nếu là 1W, 1M, 1Y -> Trả về chi tiết từng ngày
+        res.json(stocks);
+
     } catch (err) {
-        console.error("Error fetching market summary:", err);
-        res.status(500).json({ error: "Failed to fetch market data" });
+        console.error(err);
+        res.status(500).json({ error: "Server Error" });
     }
 });
 
-// --- 2. GET STOCK HISTORY (Cho Biểu đồ Chart) ---
-// API: GET /api/stocks/:ticker (vd: /api/stocks/AAPL)
-// Chức năng: Lấy lịch sử giá của 1 mã cụ thể để vẽ biểu đồ.
-router.get('/:ticker', async (req, res) => {
+// API Summary cho Market Page (Giữ nguyên)
+router.get('/', async (req, res) => {
     try {
-        const ticker = req.params.ticker.toUpperCase(); // Chuyển thành chữ hoa (aapl -> AAPL)
-        
-        // Lấy dữ liệu, sắp xếp Date: 1 (Tăng dần: Cũ -> Mới) để vẽ biểu đồ từ trái qua phải
-        // .limit(365) để lấy dữ liệu 1 năm gần nhất (tránh lấy quá nhiều làm lag app)
-        const history = await Stock.find({ Ticker: ticker })
-                                   .sort({ Date: 1 }) 
-                                   .limit(365);
-
-        if (history.length === 0) {
-            return res.status(404).json({ error: "Stock ticker not found" });
+        const tickers = await Stock.distinct('Ticker');
+        const summary = {};
+        for (const t of tickers) {
+            const latest = await Stock.findOne({ Ticker: t }).sort({ Date: -1 });
+            if (latest) summary[t] = latest;
         }
-
-        res.json(history);
-    } catch (err) {
-        console.error(`Error fetching history for ${req.params.ticker}:`, err);
-        res.status(500).json({ error: "Failed to fetch stock history" });
-    }
+        res.json(summary);
+    } catch (err) { res.status(500).json({ error: "Error" }); }
 });
 
 module.exports = router;

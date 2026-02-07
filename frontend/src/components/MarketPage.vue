@@ -21,8 +21,14 @@
              <div><span class="text-slate-500 text-xs">Low</span><div class="text-red-400 font-mono">${{ currentStockData.Low }}</div></div>
          </div>
          <div class="flex-1 bg-[#151921] rounded-xl border border-slate-800 p-4 relative">
-             <LandingChart v-if="chartHistory.length" :stockData="chartHistory" />
-             <div v-else class="h-full flex items-center justify-center text-slate-500">Select a stock to view chart</div>
+             <LandingChart 
+                v-if="selectedTicker" 
+                :ticker="selectedTicker" 
+                :initialData="chartHistory" 
+            />
+            <div v-else class="h-full flex items-center justify-center text-slate-500">
+                Select a stock to view chart
+            </div>
          </div>
       </div>
 
