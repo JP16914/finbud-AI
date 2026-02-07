@@ -33,6 +33,13 @@ router.post('/login', async (req, res) => {
     try {
         const { email, password } = req.body;
         const redisClient = req.app.get('redisClient');
+        
+        // Kiểm tra Redis
+        if (!redisClient) {
+            console.error("❌ Redis client not initialized");
+            return res.status(500).json({ error: "Redis not ready" });
+        }
+
         const user = await User.findOne({ email });
         if (!user) return res.status(400).json({ error: "User not found" });
 
@@ -42,12 +49,29 @@ router.post('/login', async (req, res) => {
         }
 
         const otp = generateOTP();
+        console.log(`🔑 DEBUG: OTP for ${email} is ${otp}`); // Xem OTP ở Terminal để test
+
+        // Lưu vào Redis
         await redisClient.setEx(`otp:${email}`, 300, otp);
-        await transporter.sendMail({
-            from: 'FinBud', to: email, subject: 'Login Code', html: `<h3>Code: ${otp}</h3>`
-        });
+
+        // Gửi Email (Bọc trong try-catch riêng để không làm sập cả request)
+        try {
+            await transporter.sendMail({
+                from: '"FinBud Support" <finbud206@gmail.com>', 
+                to: email, 
+                subject: 'Your Login Code', 
+                html: `<h3>Your code is: ${otp}</h3>`
+            });
+        } catch (mailError) {
+            console.error("⚠️ Mail sending failed:", mailError.message);
+            // Vẫn cho phép tiếp tục nếu đang test local
+        }
+
         res.json({ message: "OTP Sent", requireOtp: true, email });
-    } catch (e) { res.status(500).json({ error: "Error" }); }
+    } catch (e) { 
+        console.error("❌ Login Error:", e); // Xem lỗi thật ở đây
+        res.status(500).json({ error: "Internal Server Error" }); 
+    }
 });
 
 router.post('/verify-otp', async (req, res) => {
@@ -86,7 +110,7 @@ router.post('/google', async (req, res) => {
         const jwtToken = jwt.sign({ _id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '7d' });
         res.json({ 
             token: jwtToken, 
-            user: { name: user.name, email: user.email, picture: user.avatar } 
+            user: { name: user.username, email: user.email, picture: user.avatar } 
         });
     } catch (e) { 
         console.error("❌ Google Auth Error:", e.message);

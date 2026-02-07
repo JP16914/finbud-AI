@@ -137,19 +137,32 @@ const handleLoginStep1 = async () => {
 
 // Xử lý Verify OTP Step 2
 const handleVerifyOtp = async () => {
-    loading.value = true; error.value = '';
+    loading.value = true; 
+    error.value = '';
     try {
         const res = await fetch(`${API_URL}/api/auth/verify-otp`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email: email.value, otp: otpCode.value })
         });
         const data = await res.json();
+        
         if (res.ok) {
             localStorage.setItem('token', data.token);
+            const infoToSave = {
+                name: data.user.username, 
+                email: data.user.email,
+                picture: data.user.avatar
+            };
+            localStorage.setItem('user_info', JSON.stringify(infoToSave));
             emit('login-success');
         } else {
-            error.value = data.error || 'Invalid Code';
+            error.value = data.error || 'Invalid verification code';
         }
-    } catch (e) { error.value = "Server Error"; } finally { loading.value = false; }
+    } catch (e) { 
+        error.value = "Server connection failed";
+    } finally { 
+        loading.value = false; 
+    }
 };
 </script>
