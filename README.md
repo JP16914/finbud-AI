@@ -1,6 +1,6 @@
-# FinBud AI 🚀
+# FinBud 🚀
 
-FinBud AI is a comprehensive financial portfolio management application designed to help users track stocks, manage assets, and visualize financial data.
+FinBud is a comprehensive financial portfolio management application designed to help users track stocks, manage assets, and visualize financial data.
 
 ## 📂 Project Structure
 
